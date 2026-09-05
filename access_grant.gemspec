@@ -5,9 +5,8 @@ require_relative "lib/access_grant/version"
 Gem::Specification.new do |spec|
   spec.name = "access_grant"
   spec.version = AccessGrant::VERSION
-  spec.authors = ["Santosh Sah"]
-  spec.email = ["santosh.sah@ooma.com"]
-
+  spec.authors = ["SahSantoshh"]
+  spec.email = ["sahsantoshh@gmail.com"]
   spec.summary = "Dynamic, database-backed, per-tenant role and permission management for Rails."
   spec.description = <<~DESC
     AccessGrant gives Rails apps a role-based access control system where permissions
