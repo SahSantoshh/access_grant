@@ -4,12 +4,10 @@ Dynamic, database-backed, per-tenant role and permission management for
 Rails — the "roles and permissions live in the database, admins edit them at
 runtime" pattern, without a canonical Rails equivalent until now.
 
-> **Status: design phase.** This repo currently contains project scaffolding
-> and design documentation only — no engine code yet. See
-> [`docs/proposal.md`](docs/proposal.md) and
-> [`docs/architecture.md`](docs/architecture.md) for the full design. The
-> installation and usage examples below describe the *planned* v1 API and are
-> illustrative, not yet implemented.
+> **Status: design finalized.** Scaffolding only — no engine code yet. Full
+> design: [`docs/architecture.md`](docs/architecture.md),
+> [`docs/proposal.md`](docs/proposal.md). Examples below are the planned v1
+> API.
 
 ## The problem
 
@@ -30,7 +28,7 @@ fully editable by tenant admins at runtime.
 | Rolify | Yes | **No** — no permission concept at all | N/A | Partial |
 | **AccessGrant** | Yes | **Yes** | **Yes** | **Yes** |
 
-Full analysis: [`docs/proposal.md`](docs/proposal.md).
+Built **from scratch** (not on Pundit or Rolify). See [`docs/proposal.md`](docs/proposal.md).
 
 ## Installation (planned)
 
@@ -41,27 +39,58 @@ gem "access_grant"
 
 ```
 bundle install
-rails g access_grant:install --tenant=Organization --identity=Membership
+rails g access_grant:install
+rails g access_grant:setup \
+  --multi-tenant \
+  --tenant=Organization \
+  --user=User \
+  --owner-role=protected \
+  --tables=auto
 rails db:migrate
 bundle exec rake access_grant:sync_permissions
 ```
+
+`setup` patches models with `access_grant :tenant` / `access_grant :user`
+and writes `config/initializers/access_grant.rb` plus
+`config/access_grant/{permissions,roles}.rb`.
+
+**On every deploy:** run `bundle exec rake access_grant:sync_permissions`
+after migrate. Catalog sync is **not** a migration.
 
 ## Usage (planned)
 
 ```ruby
 class Organization < ApplicationRecord
-  acts_as_permission_tenant
+  access_grant :tenant
 end
 
-class Membership < ApplicationRecord
-  acts_as_permissible
+class User < ApplicationRecord
+  access_grant :user
 end
 
-membership.permitted?(:manage_billing) # => true / false
+# config/access_grant/permissions.rb
+AccessGrant.permissions do
+  resource :invoices do
+    action :couple, description: "Can couple invoices together"
+  end
+end
+
+org.grant_owner!(current_user)
+current_user.permitted?("invoices.index", tenant: org) # => true / false
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) for the full data model,
-extension points, and design guardrails.
+```ruby
+# ApplicationController
+access_grant_authorize!  # uses current_user + current_tenant
+# host defines: def current_tenant; …; end
+```
+
+Keys are strictly `resource.action`. Permission descriptions come from the
+catalog (dev/sync only); role descriptions are admin-editable.
+
+See [`docs/architecture.md`](docs/architecture.md) for models, Owner,
+overrides, and the full decision table. Acceptance scenarios:
+[`docs/superpowers/specs/2026-09-07-usage-scenarios.md`](docs/superpowers/specs/2026-09-07-usage-scenarios.md).
 
 ## Development
 

@@ -1,8 +1,8 @@
 # AccessGrant: Proposal
 
-> Status: design phase. No engine code exists in this repo yet. This document
-> is the "why" and "what"; see [architecture.md](architecture.md) for the
-> "how."
+> Status: **design finalized** for v1 shape. No engine code in this repo yet.
+> This document is the "why" and "what"; see [architecture.md](architecture.md)
+> for the "how" and resolved public-contract decisions.
 
 ## Problem statement
 
@@ -53,6 +53,22 @@ underneath it.
 | **Rolify** | Yes (`roles` table, join table, resource-scoped roles) | No — no concept of permissions at all | N/A (nothing to edit — no permission model) | Partial (resource-scoped roles), no tenant concept | No — "a simple roles library without any authorization enforcement" (Rolify's own description) |
 | **AccessGrant** | Yes (from scratch, not on Rolify) | Yes — code-defined catalog, synced into the DB | Yes — role→permission mapping is fully runtime/admin-controlled | Yes — first-class tenant concept, admin control is per-tenant | Yes — `permitted?(key)` |
 
+### Why not build AccessGrant on top of Pundit?
+
+Evaluated and rejected for v1 (**foundation = from scratch**).
+
+Pundit enforces decisions in **policy classes** (`authorize @record`).
+AccessGrant’s product requirement is a **database-backed** catalog and
+runtime-editable role→permission map. Putting the gem “on top of Pundit”
+would still require building 100% of that data model, while forcing every
+host to depend on Pundit and maintain two mental models (policy files + DB
+roles).
+
+Hosts that already implemented this workflow with Pundit can migrate
+incrementally: thin policies that call `permitted?("resource.action",
+tenant:)`, then drop Pundit if the controller hook is enough. That migration
+path is documentation, not a runtime dependency.
+
 ### Why not just add a `role_permissions` table on top of Rolify?
 
 This was evaluated and rejected. Rolify's actual surface area — a roles
@@ -82,13 +98,13 @@ joins — coherent and fully owned.
   (`:protected` / `:bypass` / `:both` / `:none`). See
   [architecture.md](architecture.md#owner-role) and the
   [Owner design spec](superpowers/specs/2026-09-05-owner-role-design.md).
-- **Many-to-many roles per person** is a hard requirement, not a single
-  role column. The person model is host-named (e.g. `User`); the gem does
+- **Many-to-many roles per user** is a hard requirement, not a single
+  role column. The user model is host-named (e.g. `User`); the gem does
   not require a Membership model.
 - **Configurable Owner floor; host-owned assignment.** When Owner is
   enabled, it is the in-app floor (explicit permissions and/or a
   `permitted?` short-circuit, per config). The host assigns Owner by
-  calling `grant_owner!(person)` after creating a tenant (or in seeds for
+  calling `grant_owner!(user)` after creating a tenant (or in seeds for
   single-tenant) — the gem does not auto-detect creators. When Owner is
   `:none`, recovery is the operational rake task only. There is still no
   ambient bypass outside the configured Owner rules.
@@ -112,7 +128,7 @@ joins — coherent and fully owned.
   ship these later; v1 is the data model, extension points, and enforcement
   primitive only.
 - **KaamSathi integration.** KaamSathi (the motivating consumer) migrating
-  its controllers and `Organization` / person models onto this gem is
+  its controllers and `Organization` / user models onto this gem is
   explicit future, separate work — not designed or scheduled here.
 - **Auto-granting Owner from request ambient state.** Detecting the org
   creator (`Current.user`, creator associations, etc.) is host-app
@@ -121,5 +137,7 @@ joins — coherent and fully owned.
 ## Where to go next
 
 See [architecture.md](architecture.md) for the resolved data model,
-extension points, proposed DSL, and the design guardrails this gem commits
-to.
+extension points, proposed DSL, design guardrails, and
+[resolved public-contract decisions](architecture.md#resolved-public-contract-decisions).
+Acceptance scenarios:
+[superpowers/specs/2026-09-07-usage-scenarios.md](superpowers/specs/2026-09-07-usage-scenarios.md).
