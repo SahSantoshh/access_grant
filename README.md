@@ -89,7 +89,9 @@ Keys are strictly `resource.action`. Permission descriptions come from the
 catalog (dev/sync only); role descriptions are admin-editable.
 
 See [`docs/architecture.md`](docs/architecture.md) for models, Owner,
-overrides, and the full decision table. Acceptance scenarios:
+[configuration reference](docs/architecture.md#configuration-reference)
+(every `config.*` option with examples), overrides, and the full decision
+table. Acceptance scenarios:
 [`docs/superpowers/specs/2026-09-07-usage-scenarios.md`](docs/superpowers/specs/2026-09-07-usage-scenarios.md).
 
 ## Development
