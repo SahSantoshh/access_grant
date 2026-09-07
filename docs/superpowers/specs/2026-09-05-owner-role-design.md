@@ -1,7 +1,7 @@
 # Owner role for tenant creator
 
-> Status: approved design (docs only; not yet implemented)
-> Date: 2026-09-05
+> Status: **design finalized** (docs only; not yet implemented)
+> Date: 2026-09-05; updated 2026-09-07
 
 Privileged Owner role with explicit host-side assignment. The gem
 provides the Owner API and rules; the host app decides who becomes
@@ -13,13 +13,14 @@ Owner and when (for example after creating an organization).
 
 - Privileged Owner behavior via `config.owner_role`
   (`:protected` | `:bypass` | `:both` | `:none`)
-- `grant_owner!(person)` / `revoke_owner!(person)` on the tenant
+- `grant_owner!(user)` / `revoke_owner!(user)` on the tenant
   (multi-tenant) or `AccessGrant.grant_owner!` /
   `AccessGrant.revoke_owner!` (single-tenant)
 - Enforce “at least one Owner” when revoking, once an Owner exists
 - Seed/protect Owner rows and re-attach catalog keys on sync for
   `:protected` / `:both`
-- Generators, DSL, and `permitted?`
+- Generators, DSL, `permitted?`, and optional controller authorize hook
+  (no Policy classes)
 
 **Host app owns**
 
@@ -27,9 +28,9 @@ Owner and when (for example after creating an organization).
 - When to call `grant_owner!` (controller, service, callback, seeds)
 - Single-tenant first Owner (seeds or console)
 
-The gem does **not** auto-detect a creator, read `Current.user`, or
-inspect a `creator` / `created_by` column. No `auto_grant_owner`,
-`current_person`, or `creator_column` config.
+The gem does **not** auto-detect a creator for `grant_owner!`. The authorize
+hook defaults to controller methods `current_user` / `current_tenant` only
+at the edge (host implements `current_tenant` when multi-tenant).
 
 ```ruby
 # Host app — project responsibility
@@ -41,7 +42,7 @@ org.grant_owner!(current_user)
 
 **Phase 1 — `rails g access_grant:install`**
 
-Creates core tables only (no tenant or person assumptions):
+Creates core tables only (no tenant or user assumptions):
 
 - `permissions` — catalog keys
 - `roles` — `name` only (no tenant column yet)
@@ -55,7 +56,7 @@ Accepts flags (non-interactive) or asks interactively when omitted:
 rails g access_grant:setup \
   --multi-tenant \
   --tenant=Organization \
-  --person=User \
+  --user=User \
   --owner-role=protected
 ```
 
@@ -63,17 +64,17 @@ rails g access_grant:setup \
 |---|---|---|
 | `--multi-tenant` / `--single-tenant` | Scope mode | asked if omitted |
 | `--tenant=Organization` | Tenant class (multi-tenant only) | `Organization` |
-| `--person=User` | Person class | `User` |
+| `--user=User` | User class | `User` |
 | `--owner-role=protected` | Owner mechanism | `protected` |
 
 Writes:
 
 - Migrations for the tenant FK on `roles` (multi-tenant only) and the
-  person↔role join (`user_roles`, `account_roles`, …)
+  user↔role join (`user_roles`, `account_roles`, …)
 - `config/initializers/access_grant.rb` with the chosen classes and
   Owner settings
 - **Patches host models:** inserts `access_grant :tenant` into the
-  tenant model file and `access_grant :person` into the person model
+  tenant model file and `access_grant :user` into the user model
   file (skips if already present; fails clearly if the model file
   cannot be found)
 
@@ -84,7 +85,7 @@ Organization ──< Role >── role_permissions ── Permission
 ```
 
 No Membership model. Membership remains a host concern if the app
-needs it; AccessGrant attaches roles to the configured person.
+needs it; AccessGrant attaches roles to the configured user.
 
 ## DSL
 
@@ -94,7 +95,7 @@ class Organization < ApplicationRecord
 end
 
 class User < ApplicationRecord
-  access_grant :person
+  access_grant :user
 end
 ```
 
@@ -135,7 +136,7 @@ AccessGrant.revoke_owner!(maya)
 1. Finds or creates the Owner role for that scope
 2. Applies the configured mechanism (attach all catalog keys when
    `:protected` or `:both`)
-3. Inserts the person↔role row
+3. Inserts the user↔role row
 
 Creating a tenant without calling `grant_owner!` is allowed. The gem
 does not enforce a first Owner on create. The “at least one Owner”
@@ -151,7 +152,7 @@ Owner is turned off.
 |---|---|---|---|---|---|
 | `:none` | not seeded | — | normal join | n/a | n/a |
 | `:protected` | seeded | every catalog key; sync re-attaches | normal join | no | no |
-| `:bypass` | seeded | optional | short-circuit true if person has Owner | role assignable | no (still block last) |
+| `:bypass` | seeded | optional | short-circuit true if user has Owner | role assignable | no (still block last) |
 | `:both` | seeded | every catalog key + sync | short-circuit true | no | no |
 
 Plain-language examples:
@@ -174,15 +175,16 @@ permission to every Owner role in scope.
 ## Permission checks
 
 ```ruby
-# Multi-tenant — “Can Maya manage billing in Acme?”
-maya.permitted?(:manage_billing, tenant: acme)
+# Multi-tenant — “Can Maya run invoices#index in Acme?”
+maya.permitted?("invoices.index", tenant: acme)
 
 # Single-tenant
-maya.permitted?(:manage_billing)
+maya.permitted?("invoices.index")
 ```
 
-Checks are scoped per tenant when multi-tenant. Owner of Acme does
-not imply access in Beta.
+Missing `tenant:` in multi-tenant mode **raises**. Unknown keys **raise**
+(including under Owner bypass). No gem-level memoization — see
+architecture resolved decisions.
 
 ## Error cases
 
@@ -200,7 +202,7 @@ Operational rake task remains for recovery (including zero-Owner
 scopes after a forgotten grant, or data repair):
 
 ```
-bundle exec rake access_grant:grant_role[role_name,person_id]
+bundle exec rake access_grant:grant_role[role_name,user_id]
 ```
 
 Out of band only — not an ambient bypass in `permitted?` beyond the
@@ -235,21 +237,21 @@ configured Owner mechanism.
   Owner in a scope (when Owner is enabled). Rationale: the house
   must keep a key-holder; the rake task is for ops, not accidental
   zero Owners.
-- **No Membership in the gem.** Person model is named at setup; join
-  is `#{person}_roles`. Rationale: Membership is a host concern;
+- **No Membership in the gem.** User model is named at setup; join
+  is `#{user}_roles` / `user_roles`. Rationale: Membership is a host concern;
   roles already belong to the tenant.
 - **`permitted?` takes an optional tenant** in multi-tenant mode.
-  Rationale: without Membership, tenant must be passed when a person
+  Rationale: without Membership, tenant must be passed when a user
   can belong to many orgs.
 - **Two-phase generator** — `access_grant:install` then
-  `access_grant:setup`. Setup accepts `--tenant`, `--person`,
+  `access_grant:setup`. Setup accepts `--tenant`, `--user`,
   `--multi-tenant` / `--single-tenant`, and `--owner-role` (or asks
   interactively). Rationale: tenant wiring may not exist on day one;
   flags keep CI/scripts non-interactive.
 - **Setup patches model files** with `access_grant :tenant` and
-  `access_grant :person`. Rationale: install should leave the host
+  `access_grant :user`. Rationale: install should leave the host
   wired without a manual model edit; skip if already present.
-- **DSL: `access_grant :tenant` / `access_grant :person`.** Replaces
+- **DSL: `access_grant :tenant` / `access_grant :user`.** Replaces
   `acts_as_permission_tenant` / `acts_as_permissible`. Rationale:
   one method, two hats, simpler naming.
 - **Default `owner_role` is `:protected`.** Rationale: explicit
@@ -258,3 +260,12 @@ configured Owner mechanism.
 - **No gem auto-detect of creator** (`Current.user`, creator
   columns, etc.). Rationale: that responsibility stays on the
   project side; the gem only exposes the API to configure and call.
+- **Permission keys are only `resource.action`** (strict regex; nothing
+  else stored). Keys are never taken from request params. Rationale:
+  predictable catalog, no injection-style free-text keys, harder to
+  misuse in authorize paths.
+- **Public-contract edge cases** (missing tenant, unknown keys,
+  freshness, Owner name reservation, catalog retirement, prefixed
+  tables) are resolved in architecture — see
+  [architecture.md](../../architecture.md#resolved-public-contract-decisions)
+  and the [usage scenarios](2026-09-07-usage-scenarios.md) inventory.
