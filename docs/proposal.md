@@ -75,18 +75,25 @@ joins — coherent and fully owned.
   from a UI.
 - **Roles are fully dynamic and runtime-editable.** Tenant admins can create,
   rename, delete roles, and decide which catalog permissions each role
-  grants — at runtime, no deploy. Any seeded default roles (e.g.
-  Admin/Manager/Worker) are not special-cased in code; they are editable and
-  deletable like any other role.
-- **Many-to-many roles per identity** is a hard requirement, not a single
-  role column.
-- **No hardcoded floor.** There is deliberately no unrevokable "super admin"
-  capability baked into the app layer. An admin could, in principle,
-  accidentally strip the very permission needed to manage roles. This is an
-  accepted risk, mitigated only by an *operational* escape hatch (a rake
-  task), never an app-level bypass.
+  grants — at runtime, no deploy. Ordinary seeded roles (e.g.
+  Admin/Manager/Worker) are not special-cased; they are editable and
+  deletable like any other role. **Owner** is the exception: an optional
+  privileged role whose mechanism is host-configured
+  (`:protected` / `:bypass` / `:both` / `:none`). See
+  [architecture.md](architecture.md#owner-role) and the
+  [Owner design spec](superpowers/specs/2026-09-05-owner-role-design.md).
+- **Many-to-many roles per person** is a hard requirement, not a single
+  role column. The person model is host-named (e.g. `User`); the gem does
+  not require a Membership model.
+- **Configurable Owner floor; host-owned assignment.** When Owner is
+  enabled, it is the in-app floor (explicit permissions and/or a
+  `permitted?` short-circuit, per config). The host assigns Owner by
+  calling `grant_owner!(person)` after creating a tenant (or in seeds for
+  single-tenant) — the gem does not auto-detect creators. When Owner is
+  `:none`, recovery is the operational rake task only. There is still no
+  ambient bypass outside the configured Owner rules.
 - **Per-tenant scoping of admin control.** Who can assign permissions to
-  roles, and roles to identities, is controllable per tenant — not a single
+  roles, and roles to people, is controllable per tenant — not a single
   global permission matrix shared across every tenant using the host app.
 - **Ships as a mountable Rails engine with generators**, following the
   Devise/Pundit convention: `rails g access_grant:install` copies migrations
@@ -105,8 +112,11 @@ joins — coherent and fully owned.
   ship these later; v1 is the data model, extension points, and enforcement
   primitive only.
 - **KaamSathi integration.** KaamSathi (the motivating consumer) migrating
-  its 16 controllers and `Membership`/`Organization` models onto this gem is
+  its controllers and `Organization` / person models onto this gem is
   explicit future, separate work — not designed or scheduled here.
+- **Auto-granting Owner from request ambient state.** Detecting the org
+  creator (`Current.user`, creator associations, etc.) is host-app
+  responsibility; the gem only exposes `grant_owner!`.
 
 ## Where to go next
 
