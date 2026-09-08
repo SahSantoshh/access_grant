@@ -39,7 +39,7 @@ module AccessGrant
       }.freeze
 
       def resolve_options!
-        @multi_tenant = resolve_multi_tenant!
+        @multi_tenant = multi_tenant_install?
         @tenant_class = @multi_tenant ? options[:tenant] : nil
         @user_class = options[:user]
         @owner_role = options[:owner_role].to_sym
@@ -88,16 +88,12 @@ module AccessGrant
 
       private
 
-      def resolve_multi_tenant!
-        if options[:multi_tenant]
-          true
-        elsif options[:single_tenant]
-          false
-        elsif options[:multi_tenant].nil? && options[:single_tenant].nil?
-          yes?("Multi-tenant install? (y/n)")
-        else
-          false
-        end
+      def multi_tenant_install?
+        return true if options[:multi_tenant]
+        return false if options[:single_tenant]
+        return yes?("Multi-tenant install? (y/n)") if options[:multi_tenant].nil? && options[:single_tenant].nil?
+
+        false
       end
 
       def resolve_tables!

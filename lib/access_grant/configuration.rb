@@ -37,7 +37,7 @@ module AccessGrant
     attr_accessor :recover_access
 
     # Build a configuration with architecture defaults.
-    def initialize # rubocop:disable Metrics/MethodLength
+    def initialize
       @user_class = "User"
       @owner_role = :protected
       @owner_role_name = "Owner"

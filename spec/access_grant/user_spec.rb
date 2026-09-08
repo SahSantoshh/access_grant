@@ -18,7 +18,7 @@ RSpec.describe "access_grant :user" do
   after { AccessGrant.reset_config! }
 
   describe "#permitted?" do
-    context "multi-tenant" do
+    context "when multi-tenant" do
       before do
         AccessGrant.configure do |config|
           config.tenant_class = "Organization"
@@ -78,7 +78,7 @@ RSpec.describe "access_grant :user" do
       end
     end
 
-    context "single-tenant" do
+    context "when single-tenant" do
       before do
         AccessGrant.configure do |config|
           config.tenant_class = nil

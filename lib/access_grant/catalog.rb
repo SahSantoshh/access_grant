@@ -40,9 +40,9 @@ module AccessGrant
     #
     # @yield DSL
     # @return [void]
-    def replace(&block)
+    def replace(&)
       clear!
-      DSL.new(self).instance_eval(&block)
+      DSL.new(self).instance_eval(&)
     end
 
     # Insert or override one catalog entry.

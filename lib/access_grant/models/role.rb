@@ -90,29 +90,39 @@ module AccessGrant
     # @param viewer_actions [Array<String>] action suffixes for Viewer roles
     # @return [void]
     def self.ensure_resource_defaults_for!(tenant, viewer_actions: %w[index show])
-      defaults = {}
       viewer_actions = viewer_actions.map(&:to_s)
+      defaults = resource_default_role_map(viewer_actions)
+      ensure_defaults_for!(tenant, defaults)
+    end
 
-      permissions_by_category = Hash.new { |hash, key| hash[key] = [] }
-      Permission.select(:id, :key, :category).find_each do |permission|
-        category = permission.category.presence || permission.key.split(".", 2).first
-        permissions_by_category[category] << permission
-      end
-
+    def self.resource_default_role_map(viewer_actions)
+      defaults = {}
       permissions_by_category.each do |category, permissions|
-        label = category.to_s.tr("_", " ").split.map(&:capitalize).join(" ")
+        label = humanize_category(category)
         keys = permissions.map(&:key)
-        viewer_keys = keys.select do |key|
-          action = key.split(".", 2).last
-          viewer_actions.include?(action)
-        end
+        viewer_keys = keys.select { |key| viewer_actions.include?(key.split(".", 2).last) }
 
         defaults["#{label} Viewer"] = viewer_keys if viewer_keys.any?
         defaults["#{label} Manager"] = keys if keys.any?
       end
-
-      ensure_defaults_for!(tenant, defaults)
+      defaults
     end
+    private_class_method :resource_default_role_map
+
+    def self.permissions_by_category
+      grouped = Hash.new { |hash, key| hash[key] = [] }
+      Permission.select(:id, :key, :category).find_each do |permission|
+        category = permission.category.presence || permission.key.split(".", 2).first
+        grouped[category] << permission
+      end
+      grouped
+    end
+    private_class_method :permissions_by_category
+
+    def self.humanize_category(category)
+      category.to_s.tr("_", " ").split.map(&:capitalize).join(" ")
+    end
+    private_class_method :humanize_category
 
     private
 
