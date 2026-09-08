@@ -59,6 +59,41 @@ RSpec.describe AccessGrant::Role do
     end
   end
 
+  describe ".ensure_resource_defaults_for!" do
+    it "creates Viewer and Manager roles per permission category" do
+      AccessGrant::Permission.create!(key: "invoices.index", category: "invoices")
+      AccessGrant::Permission.create!(key: "invoices.show", category: "invoices")
+      AccessGrant::Permission.create!(key: "invoices.destroy", category: "invoices")
+      AccessGrant::Permission.create!(key: "billing.export", category: "billing")
+
+      described_class.ensure_resource_defaults_for!(Struct.new(:id).new(7))
+
+      viewer = described_class.find_by!(tenant_id: 7, name: "Invoices Viewer")
+      expect(viewer.permission_keys).to match_array(%w[invoices.index invoices.show])
+
+      manager = described_class.find_by!(tenant_id: 7, name: "Invoices Manager")
+      expect(manager.permission_keys).to match_array(
+        %w[invoices.index invoices.show invoices.destroy]
+      )
+
+      billing_manager = described_class.find_by!(tenant_id: 7, name: "Billing Manager")
+      expect(billing_manager.permission_keys).to eq(%w[billing.export])
+      expect(described_class.find_by(tenant_id: 7, name: "Billing Viewer")).to be_nil
+    end
+
+    it "is create-only for existing role names" do
+      AccessGrant::Permission.create!(key: "invoices.index", category: "invoices")
+      AccessGrant::Permission.create!(key: "invoices.show", category: "invoices")
+      described_class.create!(name: "Invoices Viewer", tenant_id: 7)
+
+      described_class.ensure_resource_defaults_for!(Struct.new(:id).new(7))
+
+      expect(described_class.find_by!(tenant_id: 7, name: "Invoices Viewer").permission_keys).to eq([])
+      expect(described_class.find_by!(tenant_id: 7, name: "Invoices Manager").permission_keys)
+        .to match_array(%w[invoices.index invoices.show])
+    end
+  end
+
   describe "name uniqueness" do
     it "rejects a case-insensitive duplicate within the same tenant_id" do
       described_class.create!(name: "Viewer", tenant_id: 1)

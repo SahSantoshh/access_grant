@@ -84,7 +84,7 @@ RSpec.describe "AccessGrant generators smoke" do
     expect(initializer).to include('roles: "roles"')
 
     expect(read!("config/access_grant/permissions.rb")).to include("resource :invoices")
-    expect(read!("config/access_grant/roles.rb")).to include("ensure_defaults_for!")
+    expect(read!("config/access_grant/roles.rb")).to include("ensure_resource_defaults_for!")
 
     user_roles = migration_matching("create_access_grant_user_roles")
     expect(user_roles).to be_present

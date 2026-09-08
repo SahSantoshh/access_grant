@@ -76,6 +76,44 @@ module AccessGrant
       end
     end
 
+    # Starting-point roles derived from synced permissions, grouped by +category+
+    # (resource / model name). Create-only; safe to call on every tenant create.
+    #
+    # For category +"invoices"+ with keys +invoices.index+, +invoices.show+, …:
+    # - +"Invoices Viewer"+ — actions in +viewer_actions+ that exist
+    # - +"Invoices Manager"+ — all keys in that category
+    #
+    # Requires a prior +access_grant:sync_permissions+ so Permission rows exist.
+    # Hosts customize or replace this from +config/access_grant/roles.rb+.
+    #
+    # @param tenant [Object, nil]
+    # @param viewer_actions [Array<String>] action suffixes for Viewer roles
+    # @return [void]
+    def self.ensure_resource_defaults_for!(tenant, viewer_actions: %w[index show])
+      defaults = {}
+      viewer_actions = viewer_actions.map(&:to_s)
+
+      permissions_by_category = Hash.new { |hash, key| hash[key] = [] }
+      Permission.select(:id, :key, :category).find_each do |permission|
+        category = permission.category.presence || permission.key.split(".", 2).first
+        permissions_by_category[category] << permission
+      end
+
+      permissions_by_category.each do |category, permissions|
+        label = category.to_s.tr("_", " ").split.map(&:capitalize).join(" ")
+        keys = permissions.map(&:key)
+        viewer_keys = keys.select do |key|
+          action = key.split(".", 2).last
+          viewer_actions.include?(action)
+        end
+
+        defaults["#{label} Viewer"] = viewer_keys if viewer_keys.any?
+        defaults["#{label} Manager"] = keys if keys.any?
+      end
+
+      ensure_defaults_for!(tenant, defaults)
+    end
+
     private
 
     def name_not_reserved_owner
