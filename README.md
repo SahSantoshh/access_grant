@@ -1,11 +1,15 @@
 # AccessGrant
 
+[![Gem Version](https://badge.fury.io/rb/access_grant.svg)](https://rubygems.org/gems/access_grant)
+[![CI](https://github.com/SahSantoshh/access_grant/actions/workflows/ci.yml/badge.svg)](https://github.com/SahSantoshh/access_grant/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
+
 Dynamic, database-backed, per-tenant role and permission management for
 Rails — the "roles and permissions live in the database, admins edit them at
 runtime" pattern, without a canonical Rails equivalent until now.
 
-> **Status: v1 implementation.** Full design:
-> [`docs/architecture.md`](docs/architecture.md),
+> **Status:** v1.0 published on [RubyGems](https://rubygems.org/gems/access_grant).
+> Design: [`docs/architecture.md`](docs/architecture.md),
 > [`docs/proposal.md`](docs/proposal.md).
 
 ## The problem

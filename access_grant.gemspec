@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
     permission catalog synced into the database, dynamic per-tenant roles, and a
     permitted?(key) check.
   DESC
-  spec.homepage = "https://github.com/santoshsah/access_grant"
+  spec.homepage = "https://github.com/SahSantoshh/access_grant"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.0"
 
