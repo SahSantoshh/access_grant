@@ -1,0 +1,80 @@
+# frozen_string_literal: true
+
+# Boot wiring for AccessGrant. Every config.* option is listed below with
+# defaults and examples — see docs/architecture.md Configuration reference.
+
+AccessGrant.configure do |config|
+  # --- tenant_class (String or nil; default: nil = single-tenant) ---
+  # Host model that owns roles. When set, roles get a tenant FK and
+  # permitted? requires tenant:.
+<% if multi_tenant? -%>
+  config.tenant_class = "<%= tenant_class %>"
+  # Single-tenant: omit or set nil
+  # config.tenant_class = nil
+<% else -%>
+  # config.tenant_class = "Organization"
+  config.tenant_class = nil
+<% end -%>
+
+  # --- user_class (String; default: "User") ---
+  # Host model that receives roles and permitted?.
+  config.user_class = "<%= user_class %>"
+  # config.user_class = "Account"
+
+  # --- owner_role (Symbol: :protected | :bypass | :both | :none; default: :protected) ---
+  # How privileged the Owner role is.
+  config.owner_role = :<%= owner_role %>
+  # config.owner_role = :none   # no special Owner; grant_owner! raises
+
+  # --- owner_role_name (String; default: "Owner") ---
+  # Reserved role name for the privileged floor (case-insensitive).
+  config.owner_role_name = "Owner"
+  # config.owner_role_name = "Super Admin"
+
+  # --- tables (Hash; default: short names) ---
+  # Physical table names chosen by setup --tables=auto|simple|prefixed.
+  # If install migration still uses short names but these are prefixed,
+  # edit the install migration before db:migrate.
+  config.tables = {
+    roles: "<%= tables[:roles] %>",
+    permissions: "<%= tables[:permissions] %>",
+    role_permissions: "<%= tables[:role_permissions] %>",
+    user_roles: "<%= tables[:user_roles] %>"
+  }
+  # After collision / --tables=prefixed:
+  # config.tables = {
+  #   roles: "access_grant_roles",
+  #   permissions: "access_grant_permissions",
+  #   role_permissions: "access_grant_role_permissions",
+  #   user_roles: "access_grant_user_roles"
+  # }
+
+  # --- default_permission_actions (Array<String>) ---
+  # Actions emitted for each `resource :name` in the catalog DSL.
+  config.default_permission_actions = %w[index show create update destroy]
+  # config.default_permission_actions = %w[index show create update destroy search attach detach]
+
+  # --- current_user_method (Symbol; default: :current_user) ---
+  # Controller method used by access_grant_authorize! for the acting user.
+  config.current_user_method = :current_user
+  # config.current_user_method = :current_account
+
+  # --- current_tenant_method (Symbol; default: :current_tenant) ---
+  # Controller method for the tenant (multi-tenant). Host must define it.
+  # Unused when tenant_class is nil.
+  config.current_tenant_method = :current_tenant
+  # config.current_tenant_method = :current_organization
+
+  # --- on_tenant_created (Proc or nil; default: nil) ---
+  # Usually set in config/access_grant/roles.rb — seed default roles, not Owner.
+  # config.on_tenant_created = ->(tenant) { ... }
+
+  # --- recover_access (Proc or nil; default: built-in Recovery.grant_role!) ---
+  # Ops lockout recovery for rake access_grant:grant_role.
+  # config.recover_access = ->(role_name:, user_id:, tenant_id: nil) {
+  #   AccessGrant::Recovery.grant_role!(role_name:, user_id:, tenant_id:)
+  # }
+end
+
+# Load catalog + roles after boot config.
+Rails.root.glob("config/access_grant/**/*.rb").sort.each { |f| require f }

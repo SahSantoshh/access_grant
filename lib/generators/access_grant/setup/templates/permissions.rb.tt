@@ -1,0 +1,10 @@
+# frozen_string_literal: true
+
+# Permission catalog — code is the source of truth for keys.
+# Sync into the DB: bundle exec rake access_grant:sync_permissions
+
+AccessGrant.permissions do
+  resource :invoices do
+    action :couple, description: "Can couple invoices together"
+  end
+end

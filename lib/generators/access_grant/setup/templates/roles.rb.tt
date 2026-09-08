@@ -1,0 +1,15 @@
+# frozen_string_literal: true
+
+# Default roles seeded when a tenant is created (multi-tenant).
+# Owner assignment stays host-owned via grant_owner!(user) — not here.
+
+AccessGrant.configure do |config|
+  config.on_tenant_created = ->(tenant) do
+    # Create-only: skips role names that already exist for this tenant.
+    AccessGrant::Role.ensure_defaults_for!(
+      tenant,
+      "Admin" => %w[invoices.index invoices.show invoices.update],
+      "Member" => %w[invoices.index invoices.show]
+    )
+  end
+end

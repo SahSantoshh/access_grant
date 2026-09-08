@@ -33,4 +33,9 @@ Gem::Specification.new do |spec|
     end
   end
   spec.require_paths = ["lib"]
+
+  spec.add_dependency "activerecord", ">= 7.0"
+  spec.add_dependency "railties", ">= 7.0"
+
+  spec.add_development_dependency "sqlite3", ">= 1.4"
 end
