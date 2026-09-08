@@ -130,6 +130,20 @@ models) already exist, fall back to `access_grant_*` (or a custom name the
 host supplies). Association names on models stay short (`has_many :roles`
 via the DSL); `config.tables` holds the physical names.
 
+### Indexes (hot paths)
+
+| Table | Index | Why |
+|---|---|---|
+| `permissions` | unique `key` | `permitted?` / sync upsert |
+| `permissions` | `(category, key)` | Search/group by model/controller (`Permission.by_category("invoices")`, `ordered_for_ui`) |
+| `roles` | unique `(tenant_id, name)` | Per-tenant role list + uniqueness |
+| `roles` | `name` | Owner/Recovery `LOWER(name)` lookups |
+| `role_permissions` | unique `(role_id, permission_id)` + FK indexes | Join integrity; `permitted?` exists |
+| `user_roles` | unique `(user_id, role_id)` | Assignments from user; idempotent assign |
+| `user_roles` | `role_id` | Last-Owner assignment count / reverse lookup |
+
+Case-insensitive role uniqueness is enforced in AR validations; a DB expression unique index (`LOWER(name)`) is adapter-specific and left for hosts that need concurrent-create protection beyond validation.
+
 ### Models (shape and who may edit)
 
 **`AccessGrant::Permission`** (table: configured `permissions` name)
@@ -778,7 +792,8 @@ maya.permitted?("invoices.index", tenant: beta)   # => false
 viewer.permission_keys = %w[invoices.index invoices.update]
 
 # 6. Admin form helpers (queries, not a separate admin gem)
-AccessGrant::Permission.order(:category, :key)           # catalog options
+AccessGrant::Permission.ordered_for_ui                   # catalog options (indexed)
+AccessGrant::Permission.by_category("invoices")          # one model/controller group
 viewer.permission_keys                                   # selected keys
 maya.roles.merge(AccessGrant::Role.for_tenant(acme))     # roles in Acme only
 
@@ -852,11 +867,11 @@ segment) generates the **default action set** with templated descriptions:
 
 | Action | Key example | Default description template |
 |---|---|---|
-| `index` | `invoices.index` | Can view list of %{resources} |
-| `show` | `invoices.show` | Can view details of a %{resource} |
-| `create` | `invoices.create` | Can create a new %{resource} |
-| `update` | `invoices.update` | Can update an existing %{resource} |
-| `destroy` | `invoices.destroy` | Can delete an existing %{resource} |
+| `index` | `invoices.index` | Can view list of %<resources>s |
+| `show` | `invoices.show` | Can view details of a %<resource>s |
+| `create` | `invoices.create` | Can create a new %<resource>s |
+| `update` | `invoices.update` | Can update an existing %<resource>s |
+| `destroy` | `invoices.destroy` | Can delete an existing %<resource>s |
 
 Hosts may extend the default set via config (e.g. add `search`, `attach`,
 `detach`, `bulk_delete`) without forking the gem:

@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def change
+    # Short default names. If setup chose access_grant_* tables, edit these
+    # names to match config.tables before migrating.
+    create_table :permissions do |t|
+      t.string :key, null: false
+      t.text :description
+      t.string :category
+      t.timestamps
+    end
+    # permitted? / sync upsert by key
+    add_index :permissions, :key, unique: true
+    # Search/group by model/controller (category defaults to resource name,
+    # e.g. "invoices") — Permission.by_category / ordered_for_ui
+    add_index :permissions, %i[category key]
+
+    create_table :roles do |t|
+      t.string :name, null: false
+      t.text :description
+      t.bigint :tenant_id # nullable for single-tenant / global roles
+      t.timestamps
+    end
+    # list roles for a tenant + unique name per tenant (case-sensitive at DB;
+    # AR validates case-insensitively — expression unique index is adapter-specific)
+    add_index :roles, %i[tenant_id name], unique: true
+    # Owner / Recovery lookups: WHERE tenant_id = ? AND LOWER(name) = ?
+    add_index :roles, :name
+
+    create_table :role_permissions do |t|
+      t.references :role, null: false, foreign_key: { to_table: :roles }
+      t.references :permission, null: false, foreign_key: { to_table: :permissions }
+      t.timestamps
+    end
+    # t.references already indexes role_id and permission_id individually
+    add_index :role_permissions, %i[role_id permission_id], unique: true
+  end
+end
