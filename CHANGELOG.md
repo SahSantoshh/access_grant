@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-08
+
 ### Added
 
 - **Configuration** — table names, tenant/user classes, owner role mode, controller

@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Gem version to release (must match AccessGrant::VERSION)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish gem ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.1"
+          bundler-cache: true
+
+      - name: Assert version matches
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          ACTUAL="$(ruby -r./lib/access_grant/version -e 'print AccessGrant::VERSION')"
+          if [ "$ACTUAL" != "$EXPECTED_VERSION" ]; then
+            echo "::error::AccessGrant::VERSION ($ACTUAL) != workflow input ($EXPECTED_VERSION)"
+            exit 1
+          fi
+          if ! grep -qE "^## \[${EXPECTED_VERSION}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md missing heading ## [${EXPECTED_VERSION}]"
+            exit 1
+          fi
+          echo "Releasing access_grant ${EXPECTED_VERSION}"
+
+      - name: Publish to RubyGems
+        uses: rubygems/release-gem@v1
+
+      - name: Extract changelog notes
+        id: notes
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          NOTES_FILE="${RUNNER_TEMP}/release_notes.md"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" {capture=1; next}
+            /^## \[/ {if (capture) exit}
+            capture {print}
+          ' CHANGELOG.md > "$NOTES_FILE"
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "::error::No CHANGELOG body found for ${VERSION}"
+            exit 1
+          fi
+          {
+            echo "path=${NOTES_FILE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: v${{ inputs.version }}
+          body_path: ${{ steps.notes.outputs.path }}
+          fail_on_unmatched_files: true
