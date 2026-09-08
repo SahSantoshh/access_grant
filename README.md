@@ -87,6 +87,9 @@ current_user.permitted?("invoices.index", tenant: org) # => true / false
 access_grant_authorize!  # uses current_user + current_tenant
 # host defines: def current_tenant; …; end
 
+# Skip public auth endpoints (Devise sessions/registrations/passwords, etc.)
+skip_access_grant_authorize! if: :devise_controller?
+
 # Raises AccessGrant::NotAuthorizedError — rescue in the host, e.g.:
 # rescue_from AccessGrant::NotAuthorizedError, with: -> { head :forbidden }
 ```
