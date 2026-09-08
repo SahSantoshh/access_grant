@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "access_grant"
+require "support/active_record"
+require "support/schema"
+require "support/test_models"
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|

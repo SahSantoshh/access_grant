@@ -1,0 +1,27 @@
+# frozen_string_literal: true
+
+# Default roles seeded when a tenant is created (multi-tenant).
+# Edit this file freely — it is your app's starting point, not Owner assignment.
+# Owner stays host-owned: org.grant_owner!(user).
+#
+# Prerequisite: run `bundle exec rake access_grant:sync_permissions` so the
+# permission catalog exists in the DB before roles reference keys.
+
+AccessGrant.configure do |config|
+  config.on_tenant_created = ->(tenant) do
+    # Per-resource Viewer + Manager roles from synced Permission.category
+    # (e.g. resource :invoices → "Invoices Viewer", "Invoices Manager").
+    # Create-only: existing role names for this tenant are left alone.
+    AccessGrant::Role.ensure_resource_defaults_for!(tenant)
+
+    # Or define explicit names/keys yourself:
+    # AccessGrant::Role.ensure_defaults_for!(
+    #   tenant,
+    #   "Admin" => %w[invoices.index invoices.show invoices.update],
+    #   "Member" => %w[invoices.index invoices.show]
+    # )
+  end
+end
+
+# Single-tenant: there is no tenant create callback. From db/seeds.rb (after sync):
+#   AccessGrant::Role.ensure_resource_defaults_for!(nil)

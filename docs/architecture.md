@@ -130,6 +130,20 @@ models) already exist, fall back to `access_grant_*` (or a custom name the
 host supplies). Association names on models stay short (`has_many :roles`
 via the DSL); `config.tables` holds the physical names.
 
+### Indexes (hot paths)
+
+| Table | Index | Why |
+|---|---|---|
+| `permissions` | unique `key` | `permitted?` / sync upsert |
+| `permissions` | `(category, key)` | Search/group by model/controller (`Permission.by_category("invoices")`, `ordered_for_ui`) |
+| `roles` | unique `(tenant_id, name)` | Per-tenant role list + uniqueness |
+| `roles` | `name` | Owner/Recovery `LOWER(name)` lookups |
+| `role_permissions` | unique `(role_id, permission_id)` + FK indexes | Join integrity; `permitted?` exists |
+| `user_roles` | unique `(user_id, role_id)` | Assignments from user; idempotent assign |
+| `user_roles` | `role_id` | Last-Owner assignment count / reverse lookup |
+
+Case-insensitive role uniqueness is enforced in AR validations; a DB expression unique index (`LOWER(name)`) is adapter-specific and left for hosts that need concurrent-create protection beyond validation.
+
 ### Models (shape and who may edit)
 
 **`AccessGrant::Permission`** (table: configured `permissions` name)
@@ -379,39 +393,210 @@ competing Rails initializers):
 ```
 config/
   initializers/
-    access_grant.rb           # boot wiring
+    access_grant.rb           # boot wiring + all config.* options
   access_grant/
     permissions.rb            # catalog DSL
     roles.rb                  # default roles / on_tenant_created
 ```
 
+The `setup` generator writes a fully commented `access_grant.rb` so every
+option is visible to the host developer. Below is the reference.
+
+### Configuration reference
+
+All options are set via:
+
+```ruby
+AccessGrant.configure do |config|
+  # ...
+end
+```
+
+#### `tenant_class`
+
+- **Type:** `String` or `nil`
+- **Default:** `nil` (single-tenant)
+- **Meaning:** Host model that owns roles (e.g. `"Organization"`). When set,
+  the install is multi-tenant: roles get a tenant FK, and `permitted?`
+  requires `tenant:`.
+- **Example:**
+
+```ruby
+config.tenant_class = "Organization"
+# Single-tenant: omit or set nil
+# config.tenant_class = nil
+```
+
+#### `user_class`
+
+- **Type:** `String`
+- **Default:** `"User"`
+- **Meaning:** Host model that receives roles and `permitted?` (Devise-style
+  user). Rename if the host uses `Account`, etc.
+- **Example:**
+
+```ruby
+config.user_class = "User"
+# config.user_class = "Account"
+```
+
+#### `owner_role`
+
+- **Type:** `Symbol` — `:protected` | `:bypass` | `:both` | `:none`
+- **Default:** `:protected`
+- **Meaning:** How privileged the Owner role is. See [Owner role](#owner-role).
+- **Example:**
+
+```ruby
+config.owner_role = :protected
+# config.owner_role = :none   # no special Owner; grant_owner! raises
+```
+
+#### `owner_role_name`
+
+- **Type:** `String`
+- **Default:** `"Owner"`
+- **Meaning:** Reserved role name for the privileged floor (case-insensitive).
+- **Example:**
+
+```ruby
+config.owner_role_name = "Owner"
+# config.owner_role_name = "Super Admin"
+```
+
+#### `tables`
+
+- **Type:** `Hash` with keys `:roles`, `:permissions`, `:role_permissions`,
+  `:user_roles`
+- **Default:** short names (`"roles"`, `"permissions"`, …)
+- **Meaning:** Physical table names (chosen by setup `--tables=auto|simple|prefixed`).
+- **Example:**
+
+```ruby
+config.tables = {
+  roles: "roles",
+  permissions: "permissions",
+  role_permissions: "role_permissions",
+  user_roles: "user_roles"
+}
+# After collision:
+# config.tables = {
+#   roles: "access_grant_roles",
+#   permissions: "access_grant_permissions",
+#   role_permissions: "access_grant_role_permissions",
+#   user_roles: "access_grant_user_roles"
+# }
+```
+
+#### `default_permission_actions`
+
+- **Type:** `Array<String>`
+- **Default:** `%w[index show create update destroy]`
+- **Meaning:** Actions emitted for each `resource :name` in the catalog DSL
+  (plus description templates). Add host-specific CRUD extras here.
+- **Example:**
+
+```ruby
+config.default_permission_actions = %w[index show create update destroy]
+# Include extras used by your app:
+# config.default_permission_actions = %w[index show create update destroy search attach detach]
+```
+
+#### `current_user_method`
+
+- **Type:** `Symbol`
+- **Default:** `:current_user`
+- **Meaning:** Controller method the authorize hook calls for the acting
+  user. Only used by `access_grant_authorize!`.
+- **Example:**
+
+```ruby
+config.current_user_method = :current_user
+# config.current_user_method = :current_account
+```
+
+#### `current_tenant_method`
+
+- **Type:** `Symbol`
+- **Default:** `:current_tenant`
+- **Meaning:** Controller method the authorize hook calls for the tenant
+  (multi-tenant). Host must define that method. Unused when
+  `tenant_class` is nil.
+- **Example:**
+
+```ruby
+config.current_tenant_method = :current_tenant
+
+# app/controllers/application_controller.rb
+def current_tenant
+  current_user&.organization
+end
+
+# Or if you already expose current_organization:
+# config.current_tenant_method = :current_organization
+```
+
+#### `on_tenant_created`
+
+- **Type:** `Proc` / callable `(tenant) -> void` or `nil`
+- **Default:** `nil`
+- **Meaning:** Invoked after a tenant record is created (`access_grant
+  :tenant`). Seed default **role definitions** here — not Owner assignment
+  (still `grant_owner!(user)`).
+- **Example:**
+
+```ruby
+# Often in config/access_grant/roles.rb (generated by setup)
+config.on_tenant_created = ->(tenant) do
+  # Starter: Viewer + Manager per resource/category from synced permissions
+  AccessGrant::Role.ensure_resource_defaults_for!(tenant)
+
+  # Or explicit names:
+  # AccessGrant::Role.ensure_defaults_for!(
+  #   tenant,
+  #   "Admin"  => %w[invoices.index invoices.update members.index],
+  #   "Member" => %w[invoices.index]
+  # )
+end
+```
+
+#### `recover_access`
+
+- **Type:** `Proc` / callable or `nil` (uses built-in default)
+- **Default:** built-in `AccessGrant::Recovery.grant_role!`
+- **Meaning:** Ops lockout recovery used by
+  `rake access_grant:grant_role`. Override to integrate host tooling.
+- **Example:**
+
+```ruby
+# Default behavior (no config needed):
+# ROLE=Owner USER_ID=1 TENANT_ID=42 bundle exec rake access_grant:grant_role
+
+config.recover_access = ->(role_name:, user_id:, tenant_id: nil) {
+  AccessGrant::Recovery.grant_role!(role_name:, user_id:, tenant_id:)
+}
+```
+
+### Full boot initializer example
+
 ```ruby
 # config/initializers/access_grant.rb
 AccessGrant.configure do |config|
-  config.tenant_class = "Organization"   # multi-tenant only; omit when single-tenant
+  config.tenant_class = "Organization"
   config.user_class = "User"
-  config.owner_role = :protected         # :protected | :bypass | :both | :none
+  config.owner_role = :protected
   config.owner_role_name = "Owner"
 
-  # Physical table names chosen by setup (example: collision-free app)
   config.tables = {
     roles: "roles",
     permissions: "permissions",
     role_permissions: "role_permissions",
     user_roles: "user_roles"
   }
-  # If `roles` already existed, setup would have written e.g.:
-  #   roles: "access_grant_roles", permissions: "access_grant_permissions", ...
 
-  # Controller-hook defaults (no CurrentAttributes required):
-  #   user → controller.current_user   (Devise / Clearance / etc.)
-  #   tenant → controller.current_tenant (host-defined; multi-tenant only)
-  # Override only when the host uses different method names:
-  # config.current_user_method = :current_account
-  # config.current_tenant_method = :current_organization
-
-  # Optional: replace ops recovery (rake uses this)
-  # config.recover_access = ->(role_name:, user_id:, tenant_id: nil) { ... }
+  config.default_permission_actions = %w[index show create update destroy]
+  config.current_user_method = :current_user
+  config.current_tenant_method = :current_tenant
 end
 
 Rails.root.glob("config/access_grant/**/*.rb").sort.each { |f| require f }
@@ -439,27 +624,9 @@ AccessGrant.configure do |config|
 end
 ```
 
-**Controller-hook context (defaults — parallel controller methods):**
-
-| Need | Default | Notes |
-|---|---|---|
-| Who is acting | `current_user` | Devise / most auth gems already provide this. |
-| Which tenant | `current_tenant` | **Host-defined** helper on the controller (same style as `current_user`). Multi-tenant only; single-tenant leaves it unused. |
-
-`Current.tenant` / `CurrentAttributes` are **not** required and are not assumed from any prior host app. If the host already sets tenant via `Current.*`, they can implement `current_tenant` as a one-liner that reads it — or rename via `config.current_tenant_method`.
-
-```ruby
-# app/controllers/application_controller.rb (host — illustrative)
-def current_tenant
-  current_user&.organization   # or session-selected org, subdomain lookup, etc.
-end
-```
-
-These methods are **only** for `access_grant_authorize!`. The
-`permitted?(key, tenant:)` API still takes an **explicit** `tenant:` in
-multi-tenant mode — the hook calls `current_user` / `current_tenant` at
-the controller edge and passes them in (guardrail 2: no ambient read
-inside the check itself).
+**Controller-hook note:** `current_user` / `current_tenant` are **only** for
+`access_grant_authorize!`. The `permitted?(key, tenant:)` API still takes an
+**explicit** `tenant:` in multi-tenant mode (guardrail 2).
 
 ## Owner role
 
@@ -629,7 +796,8 @@ maya.permitted?("invoices.index", tenant: beta)   # => false
 viewer.permission_keys = %w[invoices.index invoices.update]
 
 # 6. Admin form helpers (queries, not a separate admin gem)
-AccessGrant::Permission.order(:category, :key)           # catalog options
+AccessGrant::Permission.ordered_for_ui                   # catalog options (indexed)
+AccessGrant::Permission.by_category("invoices")          # one model/controller group
 viewer.permission_keys                                   # selected keys
 maya.roles.merge(AccessGrant::Role.for_tenant(acme))     # roles in Acme only
 
@@ -703,11 +871,11 @@ segment) generates the **default action set** with templated descriptions:
 
 | Action | Key example | Default description template |
 |---|---|---|
-| `index` | `invoices.index` | Can view list of %{resources} |
-| `show` | `invoices.show` | Can view details of a %{resource} |
-| `create` | `invoices.create` | Can create a new %{resource} |
-| `update` | `invoices.update` | Can update an existing %{resource} |
-| `destroy` | `invoices.destroy` | Can delete an existing %{resource} |
+| `index` | `invoices.index` | Can view list of %<resources>s |
+| `show` | `invoices.show` | Can view details of a %<resource>s |
+| `create` | `invoices.create` | Can create a new %<resource>s |
+| `update` | `invoices.update` | Can update an existing %<resource>s |
+| `destroy` | `invoices.destroy` | Can delete an existing %<resource>s |
 
 Hosts may extend the default set via config (e.g. add `search`, `attach`,
 `detach`, `bulk_delete`) without forking the gem:
@@ -858,7 +1026,8 @@ host integration guides.
 
 | Idea                      | Meaning                                                               | v1                                       |
 | ------------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
-| **Default tenant roles**  | When an org is created, seed named roles with default permission sets | Yes — via `config/access_grant/roles.rb` |
+| **Default tenant roles**  | When an org is created, seed named roles with default permission sets | Yes — via `config/access_grant/roles.rb` (`ensure_resource_defaults_for!` or explicit `ensure_defaults_for!`) |
+| **Per-resource starter roles** | Viewer + Manager roles per permission `category` (resource) as a generateable starting point | Yes — `Role.ensure_resource_defaults_for!` (host edits `roles.rb`) |
 | **Resource-scoped roles** | Role on one record (“moderator of Forum #5”)                          | Deferred — not v1                        |
 
 
@@ -933,6 +1102,7 @@ plus later brainstorming on resource keys and controller hooks.
 | `ensure_defaults_for!` keys           | Accepts strings or symbols; normalized with `to_s` to `resource.action`. |
 | Catalog defaults                      | Default actions: `index show create update destroy` (+ optional `config.default_permission_actions`). Description templates for defaults; custom actions need explicit descriptions. |
 | Catalog discovery                     | **Explicit** `resource` entries only. No auto-scan of all AR models on sync. No `controller` / `controller_method` / duplicate `name` columns. |
+| Configuration docs                    | Every `config.*` option documented with type, default, meaning, and example in architecture; setup generator writes a commented initializer; YARD on `Configuration` attributes. |
 
 
 

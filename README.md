@@ -4,10 +4,9 @@ Dynamic, database-backed, per-tenant role and permission management for
 Rails — the "roles and permissions live in the database, admins edit them at
 runtime" pattern, without a canonical Rails equivalent until now.
 
-> **Status: design finalized.** Scaffolding only — no engine code yet. Full
-> design: [`docs/architecture.md`](docs/architecture.md),
-> [`docs/proposal.md`](docs/proposal.md). Examples below are the planned v1
-> API.
+> **Status: v1 implementation.** Full design:
+> [`docs/architecture.md`](docs/architecture.md),
+> [`docs/proposal.md`](docs/proposal.md).
 
 ## The problem
 
@@ -30,7 +29,7 @@ fully editable by tenant admins at runtime.
 
 Built **from scratch** (not on Pundit or Rolify). See [`docs/proposal.md`](docs/proposal.md).
 
-## Installation (planned)
+## Installation
 
 ```ruby
 # Gemfile
@@ -57,7 +56,7 @@ and writes `config/initializers/access_grant.rb` plus
 **On every deploy:** run `bundle exec rake access_grant:sync_permissions`
 after migrate. Catalog sync is **not** a migration.
 
-## Usage (planned)
+## Usage
 
 ```ruby
 class Organization < ApplicationRecord
@@ -83,13 +82,18 @@ current_user.permitted?("invoices.index", tenant: org) # => true / false
 # ApplicationController
 access_grant_authorize!  # uses current_user + current_tenant
 # host defines: def current_tenant; …; end
+
+# Raises AccessGrant::NotAuthorizedError — rescue in the host, e.g.:
+# rescue_from AccessGrant::NotAuthorizedError, with: -> { head :forbidden }
 ```
 
 Keys are strictly `resource.action`. Permission descriptions come from the
 catalog (dev/sync only); role descriptions are admin-editable.
 
 See [`docs/architecture.md`](docs/architecture.md) for models, Owner,
-overrides, and the full decision table. Acceptance scenarios:
+[configuration reference](docs/architecture.md#configuration-reference)
+(every `config.*` option with examples), overrides, and the full decision
+table. Acceptance scenarios:
 [`docs/superpowers/specs/2026-09-07-usage-scenarios.md`](docs/superpowers/specs/2026-09-07-usage-scenarios.md).
 
 ## Development
@@ -99,6 +103,10 @@ bin/setup
 bundle exec rspec
 bundle exec rubocop
 ```
+
+Public APIs use **YARD** comments (`@param`, `@return`, `@raise`, `@example`) —
+the usual Ruby documentation style (YARD extends RDoc). IDEs show them on
+hover; optionally generate HTML with `yard doc` if the `yard` gem is installed.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branching, commit, and release
 conventions.

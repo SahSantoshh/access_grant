@@ -1,0 +1,14 @@
+# frozen_string_literal: true
+
+class <%= migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def change
+    create_table :<%= @user_roles_table %>, id: false do |t|
+      t.bigint :user_id, null: false
+      t.bigint :role_id, null: false
+    end
+    # permitted? starts from user; unique prevents duplicate assignments
+    add_index :<%= @user_roles_table %>, %i[user_id role_id], unique: true
+    # last-Owner assignment_count / reverse: users for a role
+    add_index :<%= @user_roles_table %>, :role_id
+  end
+end
