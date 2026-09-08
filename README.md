@@ -1,6 +1,6 @@
 # AccessGrant
 
-[![Gem Version](https://badge.fury.io/rb/access_grant.svg)](https://rubygems.org/gems/access_grant)
+[![Gem Version](https://img.shields.io/gem/v/access_grant)](https://rubygems.org/gems/access_grant)
 [![CI](https://github.com/SahSantoshh/access_grant/actions/workflows/ci.yml/badge.svg)](https://github.com/SahSantoshh/access_grant/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
 
