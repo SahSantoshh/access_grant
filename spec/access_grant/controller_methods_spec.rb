@@ -62,7 +62,7 @@ RSpec.describe AccessGrant::ControllerMethods do
   end
 
   describe "#access_grant_authorize_request!" do
-    context "permission key mapping" do
+    context "when mapping permission keys" do
       it "maps invoices#index to invoices.index" do
         user = double("User")
         controller.controller_name = "invoices"
@@ -119,7 +119,7 @@ RSpec.describe AccessGrant::ControllerMethods do
       end
     end
 
-    context "current_user / current_tenant resolution" do
+    context "when resolving current_user / current_tenant" do
       it "uses config.current_user_method" do
         AccessGrant.configure { |c| c.current_user_method = :current_account }
 
@@ -166,7 +166,7 @@ RSpec.describe AccessGrant::ControllerMethods do
       end
     end
 
-    context "failures" do
+    context "when authorization fails" do
       it "raises NotAuthorizedError when permitted? is false" do
         user = double("User", permitted?: false)
         controller.controller_name = "invoices"
@@ -197,12 +197,17 @@ RSpec.describe AccessGrant::ControllerMethods do
         controller.action_name = "index"
         controller.current_user = user
 
-        expect do
+        raised = nil
+        begin
           controller.access_grant_authorize_request!
-        end.to raise_error(AccessGrant::NotAuthorizedError, 'Unknown permission key: "invoices.index"') do |error|
-          expect(error.cause).to be_a(AccessGrant::Error)
-          expect(error.cause).not_to be_a(AccessGrant::NotAuthorizedError)
+        rescue AccessGrant::NotAuthorizedError => e
+          raised = e
         end
+
+        expect(raised).to be_a(AccessGrant::NotAuthorizedError)
+        expect(raised.message).to eq('Unknown permission key: "invoices.index"')
+        expect(raised.cause).to be_a(AccessGrant::Error)
+        expect(raised.cause).not_to be_a(AccessGrant::NotAuthorizedError)
       end
 
       it "maps nil-tenant permitted? Error to NotAuthorizedError when multi-tenant" do

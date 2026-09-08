@@ -7,13 +7,7 @@ module AccessGrant
   module User
     # @api private
     def self.included(base)
-      base.has_and_belongs_to_many :roles,
-                                   class_name: "AccessGrant::Role",
-                                   join_table: AccessGrant.config.tables.fetch(:user_roles),
-                                   foreign_key: :user_id,
-                                   association_foreign_key: :role_id,
-                                   before_remove: :access_grant_ensure_can_remove_role
-
+      configure_roles_association(base)
       base.class_eval do
         private
 
@@ -22,6 +16,16 @@ module AccessGrant
         end
       end
     end
+
+    def self.configure_roles_association(base)
+      base.has_and_belongs_to_many :roles,
+                                   class_name: "AccessGrant::Role",
+                                   join_table: AccessGrant.config.tables.fetch(:user_roles),
+                                   foreign_key: :user_id,
+                                   association_foreign_key: :role_id,
+                                   before_remove: :access_grant_ensure_can_remove_role
+    end
+    private_class_method :configure_roles_association
 
     # Capability check: does this user have +key+ via any role in scope?
     #

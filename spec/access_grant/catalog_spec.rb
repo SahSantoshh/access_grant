@@ -138,6 +138,7 @@ RSpec.describe AccessGrant::Catalog do
       expect do
         AccessGrant.permissions do
           resource :invoices do
+            # empty — rely on default_permission_actions only
           end
         end
       end.to raise_error(AccessGrant::Error, /Default action :search requires an explicit description/)

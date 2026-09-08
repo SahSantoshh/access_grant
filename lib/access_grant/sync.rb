@@ -34,11 +34,7 @@ module AccessGrant
       normalized = Array(keys).map { |key| PermissionKey.normalize!(key) }
 
       Role.transaction do
-        resolved = normalized.map do |key|
-          Permission.find_by(key: key) ||
-            raise(Error, "Unknown permission key: #{key.inspect}")
-        end
-
+        resolved = resolve_permissions!(normalized)
         role.role_permissions.delete_all
         resolved.each do |permission|
           RolePermission.create!(role_id: role.id, permission_id: permission.id)
@@ -46,6 +42,13 @@ module AccessGrant
       end
     end
     private_class_method :replace_role_permissions!
+
+    def self.resolve_permissions!(keys)
+      keys.map do |key|
+        Permission.find_by(key: key) || raise(Error, "Unknown permission key: #{key.inspect}")
+      end
+    end
+    private_class_method :resolve_permissions!
 
     def self.reattach_owner?
       REATTACH_OWNER_MODES.include?(AccessGrant.config.owner_role)

@@ -22,8 +22,77 @@ Metrics/BlockLength:
     - "spec/**/*"
     - "*.gemspec"
 
+Metrics/MethodLength:
+  Max: 20
+  CountAsOne: ["array", "hash", "heredoc"]
+  Exclude:
+    - "lib/generators/**/*"
+
+Metrics/AbcSize:
+  Max: 25
+  Exclude:
+    - "lib/generators/**/*"
+
+Metrics/ClassLength:
+  Max: 200
+  Exclude:
+    - "lib/generators/**/*"
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+Metrics/PerceivedComplexity:
+  Max: 10
+
 Layout/LineLength:
   Max: 120
 
+Gemspec/DevelopmentDependencies:
+  EnforcedStyle: Gemfile
+
+# Integration / generator specs intentionally use string describes and richer examples.
 RSpec/ExampleLength:
-  Max: 10
+  Max: 50
+
+RSpec/MultipleExpectations:
+  Max: 25
+
+RSpec/DescribeClass:
+  Exclude:
+    - "spec/integration/**/*"
+    - "spec/generators/**/*"
+    - "spec/support/**/*"
+    - "spec/access_grant/user_spec.rb"
+    - "spec/access_grant/controller_methods_spec.rb"
+    - "spec/access_grant/railtie_spec.rb"
+    - "spec/access_grant/apply_configuration_spec.rb"
+    - "spec/access_grant/owner_spec.rb"
+
+RSpec/SpecFilePathFormat:
+  Exclude:
+    - "spec/access_grant/models/**/*"
+
+RSpec/InstanceVariable:
+  Exclude:
+    - "spec/generators/**/*"
+    - "spec/access_grant/controller_methods_spec.rb"
+    - "spec/access_grant/owner_spec.rb"
+
+RSpec/ContextWording:
+  Prefixes:
+    - when
+    - with
+    - without
+    - and
+    - for
+    - if
+
+RSpec/VerifiedDoubles:
+  Exclude:
+    - "spec/access_grant/controller_methods_spec.rb"
+
+RSpec/MessageSpies:
+  EnforcedStyle: receive
+
+RSpec/StubbedMock:
+  Enabled: false
