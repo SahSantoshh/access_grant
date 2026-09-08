@@ -57,7 +57,7 @@ workflow and Trusted Publishing (OIDC). First public version is `1.0.0`.
 ### One-time human setup (outside repo)
 
 - RubyGems account with MFA
-- Configure Trusted Publisher for gem `access_grant`: owner `santoshsah`, repo `access_grant`, workflow `release.yml`, environment matching the workflow (blank or `release`)
+- Configure Trusted Publisher for gem `access_grant`: owner `SahSantoshh`, repo `access_grant`, workflow `release.yml`, environment matching the workflow (blank or `release`)
 - First publish may use RubyGems’ pending/trusted-publisher flow for a gem that does not yet exist on the index
 
 ## Badges & docs
